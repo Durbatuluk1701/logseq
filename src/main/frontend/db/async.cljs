@@ -396,6 +396,16 @@
                                  :properties [:block.temp/refs-count]})
           :block.temp/refs-count))
 
+(defn- scheduled-query-start-time
+  [journal-day]
+  (let [current-day (tf/parse yyyyMMdd-formatter (str journal-day))
+        past-days (when (= journal-day (date/today-journal-day))
+                    (state/get-scheduled-past-days))
+        query-start-day (if past-days
+                          (t/minus current-day (t/days past-days))
+                          current-day)]
+    (date/journal-day->utc-ms (parse-long (tf/unparse yyyyMMdd-formatter query-start-day)))))
+
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
@@ -405,7 +415,7 @@
           future-day (some->> future-date
                               (tf/unparse yyyyMMdd-formatter)
                               (parse-long))
-          start-time (date/journal-day->utc-ms date)
+          start-time (scheduled-query-start-time date)
           future-time (tc/to-long future-date)]
       (when-let [repo (and future-day (state/get-current-repo))]
         (<get-date-scheduled-or-deadlines-from-worker repo start-time future-time)))))

@@ -511,3 +511,39 @@
                   (fn [error]
                     (is false (str error))))
                  (p/finally done))))))
+
+(deftest get-date-scheduled-or-deadlines-past-due-lookback-test
+  (async done
+         (let [repo "logseq_db_async_past_due_journal"
+               today 20260914
+               historical-day 20260707
+               worker-calls (atom [])]
+           (p/with-redefs [state/get-current-repo (fn [] repo)
+                           state/get-scheduled-future-days (fn [] 7)
+                           state/get-scheduled-past-days (fn [] 14)
+                           date/today-journal-day (fn [] today)
+                           date/journal-title->int
+                           (fn [title]
+                             (case title
+                               "today-journal" today
+                               "historical-journal" historical-day
+                               nil))
+                           db-async/<get-date-scheduled-or-deadlines-from-worker
+                           (fn [repo' start-time future-time]
+                             (swap! worker-calls conj [repo' start-time future-time])
+                             (p/resolved []))]
+             (-> (p/let [_ (db-async/<get-date-scheduled-or-deadlines "today-journal")
+                        _ (db-async/<get-date-scheduled-or-deadlines "historical-journal")
+                        calls @worker-calls
+                        today-journal-start (date/journal-day->utc-ms today)]
+                   (let [[repo' today-start-time _] (first calls)
+                         [_historical-repo historical-start-time _] (second calls)]
+                     (is (= repo repo'))
+                     (is (< today-start-time today-journal-start)
+                         "Today's journal should query overdue tasks from past days")
+                     (is (= (date/journal-day->utc-ms historical-day) historical-start-time)
+                         "Historical journal queries should not include past-due lookback")))
+                 (p/catch
+                  (fn [error]
+                    (is false (str error))))
+                 (p/finally done))))))

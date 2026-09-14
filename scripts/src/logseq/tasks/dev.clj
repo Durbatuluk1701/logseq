@@ -43,7 +43,8 @@
     "frontend.handler.editor-test"
     "frontend.handler.route-test"
     "frontend.rfx-test"
-    "frontend.worker.db-core-test"})
+    "frontend.worker.db-core-test"
+    "frontend.worker.db-sync-test"})
 
 (def serial-test-namespaces
   #{"frontend.db.query-dsl-test"

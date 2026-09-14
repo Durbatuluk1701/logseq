@@ -4,6 +4,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.util :as sync-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
@@ -76,11 +77,24 @@
                            :token-url token-url
                            :body data})))))))
 
-(defn <resolve-ws-token
+(defn sync-auth-from-main-thread
+  []
+  (if (sync-util/cli-node-owner?)
+    (p/resolved nil)
+    (p/catch
+     (p/then (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
+             (fn [tokens]
+               (when (map? tokens)
+                 (worker-state/set-new-state!
+                  (select-keys tokens [:auth/id-token :auth/access-token :auth/refresh-token])))))
+     (fn [error]
+       (log/warn :db-sync/sync-auth-from-main-thread-failed {:error error})))))
+
+(defn- <resolve-ws-token-after-main-thread-sync
   []
   (let [token (sync-util/auth-token)
         token-expired? (id-token-expired? token)]
-    (if (and (not (sync-util/cli-node-owner?)) token-expired?)
+    (if token-expired?
       (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
         (when-not (seq id-token)
           (throw (ex-info "worker auth refresh returned empty id-token"
@@ -90,6 +104,14 @@
            (seq access-token) (assoc :auth/access-token access-token)))
         id-token)
       (p/resolved token))))
+
+(defn <resolve-ws-token
+  []
+  (if (sync-util/cli-node-owner?)
+    (p/resolved (sync-util/auth-token))
+    (p/then (sync-auth-from-main-thread)
+            (fn [_]
+              (<resolve-ws-token-after-main-thread-sync)))))
 
 (defn get-user-uuid
   [id-token]

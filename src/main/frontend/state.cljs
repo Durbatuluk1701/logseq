@@ -590,6 +590,11 @@ should be done through this fn in order to get global config and config defaults
   (let [days (:scheduled/future-days (get-config))]
     (or (when (int? days) days) 7)))
 
+(defn get-scheduled-past-days
+  []
+  (let [days (:scheduled/past-days (get-config))]
+    (or (when (int? days) days) 365)))
+
 (defn get-start-of-week
   []
   (or (:start-of-week (get-config))

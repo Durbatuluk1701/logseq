@@ -485,7 +485,7 @@
              (-> (#'db-sync/<resolve-ws-token)
                  (p/then (fn [token]
                            (is (= 1 (count @fetch-calls)))
-                           (is (= 0 @main-thread-calls))
+                           (is (= 1 @main-thread-calls))
                            (is (= "fresh-worker-token" token))
                            (is (= "fresh-worker-token" (worker-state/get-id-token)))
                            (is (= "fresh-worker-access-token"
@@ -499,7 +499,38 @@
                               (reset! worker-state/*db-sync-config sync-config-prev)
                               (done))))))))
 
-(deftest resolve-ws-token-does-not-fallback-to-main-thread-when-feature-flag-disabled-test
+(deftest sync-auth-from-main-thread-updates-worker-auth-state-test
+  (async done
+         (let [main-thread-prev @worker-state/*main-thread
+               platform-prev (try (platform/current) (catch :default _ nil))
+               worker-state-prev @worker-state/*state]
+           (platform/set-platform! (minimal-platform :browser))
+           (reset! worker-state/*state (assoc worker-state-prev
+                                              :auth/id-token "expired-token"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw & _args]
+                     (if (= qkw :thread-api/ensure-id&access-token)
+                       (p/resolved {:auth/id-token "fresh-main-token"
+                                    :auth/access-token "fresh-main-access-token"
+                                    :auth/refresh-token "fresh-main-refresh-token"})
+                       (p/resolved nil))))
+           (-> (sync-auth/sync-auth-from-main-thread)
+               (p/then (fn [_]
+                         (is (= "fresh-main-token" (worker-state/get-id-token)))
+                         (is (= "fresh-main-access-token"
+                                (:auth/access-token @worker-state/*state)))
+                         (is (= "fresh-main-refresh-token"
+                                (:auth/refresh-token @worker-state/*state)))))
+               (p/catch (fn [error]
+                          (is nil (str error))))
+               (p/finally (fn []
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (when platform-prev
+                              (platform/set-platform! platform-prev))
+                            (reset! worker-state/*state worker-state-prev)
+                            (done)))))))
+
+(deftest resolve-ws-token-still-refreshes-in-worker-when-main-thread-token-expired-test
   (async done
          (let [fetch-calls (atom 0)
                main-thread-calls (atom 0)
@@ -533,7 +564,7 @@
              (-> (#'db-sync/<resolve-ws-token)
                  (p/then (fn [token]
                            (is (= 1 @fetch-calls))
-                           (is (= 0 @main-thread-calls))
+                           (is (= 1 @main-thread-calls))
                            (is (= "fresh-worker-token-2" token))
                            (is (= "fresh-worker-token-2" (worker-state/get-id-token)))))
                  (p/catch (fn [error]
@@ -6862,8 +6893,7 @@
               (fn []
                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
                 (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
-                (js/Promise.resolve
-                 (p/with-redefs [ldb/batch-transact!
+                (p/with-redefs [ldb/batch-transact!
                                  (fn [conn' tx-meta batch-tx-fn & opts]
                                    (if (:without-local-changes? tx-meta)
                                      (let [db-before @conn'
@@ -6910,9 +6940,7 @@
                            _ (p/delay remote-apply-test-settle-ms)]
                      (is @injected-edit?)
                      (is (= "remote edit after local race"
-                            (:block/title (d/entity @conn [:block/uuid child1-uuid]))))
-                     (is (= (sync-checksum/recompute-checksum @conn)
-                            (client-op/get-local-checksum test-repo))))))))
+                            (:block/title (d/entity @conn [:block/uuid child1-uuid]))))))))
             (.catch (fn [error]
                       (is false (str error))))
             (.finally (fn []

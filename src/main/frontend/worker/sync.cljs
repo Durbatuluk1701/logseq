@@ -224,7 +224,8 @@
                                          (= (:graph-id current) (:graph-id client)))
                                 (-> (p/let [token (<resolve-ws-token)
                                             updated (connect! repo current url token)]
-                                      (reset! worker-state/*db-sync-client updated))
+                                      (when updated
+                                        (reset! worker-state/*db-sync-client updated)))
                                     (p/catch (fn [error]
                                                (log/error :db-sync/ws-reconnect-failed {:repo repo :error error})
                                                (schedule-reconnect! repo current url :connect-failed)))))))
@@ -316,7 +317,7 @@
     (stop-client! client))
   (log/info :db-sync/connect! {:repo repo
                                :token-exists? (some? (or token (auth-token)))})
-  (when-let [token' (or token (auth-token))]
+  (if-let [token' (or token (auth-token))]
     (let [ws (platform/websocket-connect (platform/current) (sync-transport/append-token url token'))
           updated (assoc client :ws ws)]
       (attach-ws-handlers! repo updated ws url)
@@ -333,7 +334,10 @@
                 :current-client-f current-client
                 :broadcast-rtc-state!-f broadcast-rtc-state!
                 :fail-fast-f fail-fast})))
-      (close-stale-ws-loop updated ws url))))
+      (close-stale-ws-loop updated ws url))
+    (do
+      (set-ws-state! client :closed)
+      client)))
 
 (defn stop!
   []
