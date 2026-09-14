@@ -6893,8 +6893,7 @@
               (fn []
                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
                 (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
-                (js/Promise.resolve
-                 (p/with-redefs [ldb/batch-transact!
+                (p/with-redefs [ldb/batch-transact!
                                  (fn [conn' tx-meta batch-tx-fn & opts]
                                    (if (:without-local-changes? tx-meta)
                                      (let [db-before @conn'
@@ -6943,7 +6942,7 @@
                      (is (= "remote edit after local race"
                             (:block/title (d/entity @conn [:block/uuid child1-uuid]))))
                      (is (= (sync-checksum/recompute-checksum @conn)
-                            (client-op/get-local-checksum test-repo))))))))
+                            (client-op/get-local-checksum test-repo)))))))
             (.catch (fn [error]
                       (is false (str error))))
             (.finally (fn []
