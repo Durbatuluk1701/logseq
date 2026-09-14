@@ -291,7 +291,7 @@
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
       (if (promise-like? result)
-        (.finally (js/Promise.resolve result) cleanup)
+        (p/finally result cleanup)
         (do
           (cleanup)
           result)))))
