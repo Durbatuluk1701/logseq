@@ -90,22 +90,28 @@
      (fn [error]
        (log/warn :db-sync/sync-auth-from-main-thread-failed {:error error})))))
 
+(defn- <resolve-ws-token-after-main-thread-sync
+  []
+  (let [token (sync-util/auth-token)
+        token-expired? (id-token-expired? token)]
+    (if token-expired?
+      (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
+        (when-not (seq id-token)
+          (throw (ex-info "worker auth refresh returned empty id-token"
+                          {:code :auth-refresh-empty-id-token})))
+        (worker-state/set-new-state!
+         (cond-> {:auth/id-token id-token}
+           (seq access-token) (assoc :auth/access-token access-token)))
+        id-token)
+      (p/resolved token))))
+
 (defn <resolve-ws-token
   []
-  (p/then (sync-auth-from-main-thread)
-          (fn [_]
-            (let [token (sync-util/auth-token)
-                  token-expired? (id-token-expired? token)]
-              (if (and (not (sync-util/cli-node-owner?)) token-expired?)
-                (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
-                  (when-not (seq id-token)
-                    (throw (ex-info "worker auth refresh returned empty id-token"
-                                    {:code :auth-refresh-empty-id-token})))
-                  (worker-state/set-new-state!
-                   (cond-> {:auth/id-token id-token}
-                     (seq access-token) (assoc :auth/access-token access-token)))
-                  id-token)
-                (p/resolved token))))))
+  (if (sync-util/cli-node-owner?)
+    (p/resolved (sync-util/auth-token))
+    (p/then (sync-auth-from-main-thread)
+            (fn [_]
+              (<resolve-ws-token-after-main-thread-sync)))))
 
 (defn get-user-uuid
   [id-token]
