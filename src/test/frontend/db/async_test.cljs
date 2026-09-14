@@ -534,14 +534,15 @@
                              (p/resolved []))]
              (-> (p/let [_ (db-async/<get-date-scheduled-or-deadlines "today-journal")
                         _ (db-async/<get-date-scheduled-or-deadlines "historical-journal")
-                        [[repo' today-start-time _] [_historical-repo historical-start-time _]
-                         @worker-calls
-                         today-journal-start (date/journal-day->utc-ms today)]
-                   (is (= repo repo'))
-                   (is (< today-start-time today-journal-start)
-                       "Today's journal should query overdue tasks from past days")
-                   (is (= (date/journal-day->utc-ms historical-day) historical-start-time)
-                       "Historical journal queries should not include past-due lookback"))
+                        calls @worker-calls
+                        today-journal-start (date/journal-day->utc-ms today)]
+                   (let [[repo' today-start-time _] (first calls)
+                         [_historical-repo historical-start-time _] (second calls)]
+                     (is (= repo repo'))
+                     (is (< today-start-time today-journal-start)
+                         "Today's journal should query overdue tasks from past days")
+                     (is (= (date/journal-day->utc-ms historical-day) historical-start-time)
+                         "Historical journal queries should not include past-due lookback")))
                  (p/catch
                   (fn [error]
                     (is false (str error))))
