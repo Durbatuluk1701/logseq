@@ -54,7 +54,8 @@
   (let [namespaces ["frontend.alpha-test"
                     "frontend.components.block.drop-boundary-test"
                     "frontend.handler.editor-test"
-                    "frontend.worker.db-core-test"]
+                    "frontend.worker.db-core-test"
+                    "frontend.worker.db-sync-test"]
         started-node-runs (atom [])]
     (with-redefs [dev/test-jobs 2
                   dev/test-batches-per-job 1
@@ -64,10 +65,11 @@
                                       {:out (string/join "\n" namespaces)}
                                       (swap! started-node-runs conj cmd-args))))]
       (dev/run-test-namespaces)
-      (is (= 4 (count @started-node-runs)))
+      (is (= 5 (count @started-node-runs)))
       (doseq [isolated-ns ["frontend.components.block.drop-boundary-test"
                            "frontend.handler.editor-test"
-                           "frontend.worker.db-core-test"]]
+                           "frontend.worker.db-core-test"
+                           "frontend.worker.db-sync-test"]]
         (is (= 1 (count (filter #(some #{isolated-ns} %) @started-node-runs))))
         (is (= 1 (->> @started-node-runs
                       (some #(when (some #{isolated-ns} %) %))
