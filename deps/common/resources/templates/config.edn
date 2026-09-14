@@ -41,6 +41,14 @@
  ;; Default value: 7
  ;; :scheduled/future-days 7
 
+ ;; Specify the number of days in the past to include for overdue scheduled
+ ;; and deadline tasks on today's journal page.
+ ;; Example usage:
+ ;; Include overdue tasks from the last 30 days:
+ ;; :scheduled/past-days 30
+ ;; Default value: 365
+ ;; :scheduled/past-days 365
+
  ;; Specify the first day of the week.
  ;; Available options:
  ;;  - integer from 0 to 6 (Monday to Sunday)

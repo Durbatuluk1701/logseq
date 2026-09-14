@@ -350,7 +350,13 @@
 (def-thread-api :thread-api/ensure-id&access-token
   []
   (p/let [_ (<ensure-id&access-token!)]
-    {:id-token (state/get-auth-id-token)}))
+    (let [tokens {:id-token (state/get-auth-id-token)
+                  :access-token (state/get-state :auth/access-token)
+                  :refresh-token (state/get-auth-refresh-token)}]
+      (merge tokens
+             {:auth/id-token (:id-token tokens)
+              :auth/access-token (:access-token tokens)
+              :auth/refresh-token (:refresh-token tokens)}))))
 
 ;;; user groups
 

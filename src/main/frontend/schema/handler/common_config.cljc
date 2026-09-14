@@ -12,6 +12,7 @@
     [:feature/enable-flashcards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:scheduled/future-days :int]
+    [:scheduled/past-days :int]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
     [:custom-js-url :string]

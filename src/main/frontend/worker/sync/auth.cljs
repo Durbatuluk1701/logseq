@@ -4,6 +4,7 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.util :as sync-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
@@ -76,20 +77,35 @@
                            :token-url token-url
                            :body data})))))))
 
+(defn sync-auth-from-main-thread
+  []
+  (if (sync-util/cli-node-owner?)
+    (p/resolved nil)
+    (p/catch
+     (p/then (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
+             (fn [tokens]
+               (when (map? tokens)
+                 (worker-state/set-new-state!
+                  (select-keys tokens [:auth/id-token :auth/access-token :auth/refresh-token])))))
+     (fn [error]
+       (log/warn :db-sync/sync-auth-from-main-thread-failed {:error error})))))
+
 (defn <resolve-ws-token
   []
-  (let [token (sync-util/auth-token)
-        token-expired? (id-token-expired? token)]
-    (if (and (not (sync-util/cli-node-owner?)) token-expired?)
-      (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
-        (when-not (seq id-token)
-          (throw (ex-info "worker auth refresh returned empty id-token"
-                          {:code :auth-refresh-empty-id-token})))
-        (worker-state/set-new-state!
-         (cond-> {:auth/id-token id-token}
-           (seq access-token) (assoc :auth/access-token access-token)))
-        id-token)
-      (p/resolved token))))
+  (p/then (sync-auth-from-main-thread)
+          (fn [_]
+            (let [token (sync-util/auth-token)
+                  token-expired? (id-token-expired? token)]
+              (if (and (not (sync-util/cli-node-owner?)) token-expired?)
+                (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
+                  (when-not (seq id-token)
+                    (throw (ex-info "worker auth refresh returned empty id-token"
+                                    {:code :auth-refresh-empty-id-token})))
+                  (worker-state/set-new-state!
+                   (cond-> {:auth/id-token id-token}
+                     (seq access-token) (assoc :auth/access-token access-token)))
+                  id-token)
+                (p/resolved token))))))
 
 (defn get-user-uuid
   [id-token]

@@ -184,3 +184,23 @@
         (finally
           (reset! worker-state/*db-sync-client prev-client)
           (set! js/setTimeout original-set-timeout))))))
+
+(deftest connect-preserves-client-when-token-missing-test
+  (let [prev-client @worker-state/*db-sync-client
+        prev-state @worker-state/*state
+        client {:repo "missing-token-repo"
+                :graph-id "graph-1"
+                :ws-state (atom :open)
+                :online-users (atom [])}]
+    (reset! worker-state/*state {})
+    (try
+      (let [updated (#'sync/connect! "missing-token-repo"
+                                       client
+                                       "wss://sync.example.test/sync/graph-1"
+                                       nil)]
+        (is (= client updated))
+        (is (nil? (:ws updated)))
+        (is (= :closed @(:ws-state updated))))
+      (finally
+        (reset! worker-state/*db-sync-client prev-client)
+        (reset! worker-state/*state prev-state)))))

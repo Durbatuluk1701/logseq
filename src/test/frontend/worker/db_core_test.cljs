@@ -3046,6 +3046,36 @@
          (is (= ["other page"]
                 (mapv :block/title page-b))))))))
 
+(deftest get-date-scheduled-or-deadlines-includes-past-due-deadlines-test
+  (restoring-worker-state
+   (fn []
+     (let [get-date-scheduled-or-deadlines! (get @thread-api/*thread-apis :thread-api/get-date-scheduled-or-deadlines)
+           conn (d/create-conn db-schema/schema)
+           page-id -1]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id page-id
+                           :block/title "Page A"
+                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                          {:block/title "overdue deadline"
+                           :block/order "a"
+                           :block/page page-id
+                           :logseq.property/deadline 500
+                           :logseq.property/status :logseq.property/status.todo}
+                          {:block/title "today deadline"
+                           :block/order "b"
+                           :block/page page-id
+                           :logseq.property/deadline 2000
+                           :logseq.property/status :logseq.property/status.todo}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [today-only (get-date-scheduled-or-deadlines! test-repo 1000 5000)
+             with-past-due (get-date-scheduled-or-deadlines! test-repo 100 5000)
+             titles (fn [result]
+                      (set (mapcat (fn [[_page blocks]]
+                                     (map :block/title blocks))
+                                   result)))]
+         (is (= #{"today deadline"} (titles today-only)))
+         (is (= #{"overdue deadline" "today deadline"} (titles with-past-due))))))))
+
 (deftest get-property-node-selector-data-prepares-worker-owned-db-data-test
   (restoring-worker-state
    (fn []
